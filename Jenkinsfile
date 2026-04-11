@@ -26,7 +26,7 @@ pipeline {
 
                     // Fallback: nếu GIT_COMMIT null thì mới gọi git
                     if (!commitId) {
-	                    def commitId = sh(
+	                    commitId = sh(
 	                        script: "git rev-parse --short HEAD",
 	                        returnStdout: true
 	                    ).trim()
