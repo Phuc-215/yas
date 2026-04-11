@@ -2,9 +2,8 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_HUB = "bync"
-        IMAGE_NAME = "service"
-        DOCKER_CREDS = "dockerhub-repo"
+        DOCKER_HUB_USR = "bync"
+        DOCKER_HUB_CREDS = "dockerhub-repo"
     }
 
     stages {
@@ -18,12 +17,13 @@ pipeline {
         stage('Get Commit ID') {
             steps {
                 script {
-                    COMMIT_ID = sh(
+                    def commitId = sh(
                         script: "git rev-parse --short HEAD",
                         returnStdout: true
                     ).trim()
 
-                    echo "Commit ID: ${COMMIT_ID}"
+		    ennv.COMMIT_ID = commitId
+                    echo "Commit ID: ${env.COMMIT_ID}"
                 }
             }
         }
@@ -31,8 +31,13 @@ pipeline {
         stage('Build Image') {
             steps {
                 script {
-                    IMAGE_TAG = "${DOCKER_HUB}/${IMAGE_NAME}:${COMMIT_ID}"
-                    sh "docker build -t ${IMAGE_TAG} ."
+		    def branchName = env.BRANCH_NAME
+                    env.SERVICE = branchName.contains('/')
+                        ? branchName.split('/')[0]
+                        : branchName
+
+                    env.IMAGE_TAG = "${DOCKER_HUB_USR}/${IMAGE_NAME}:${env.COMMIT_ID}"
+                    sh "docker build --build-arg SERVICE=${env.SERVICE} -t ${env.IMAGE_TAG} ."
                 }
             }
         }
@@ -40,18 +45,19 @@ pipeline {
         stage('Login Docker Hub') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: "${DOCKER_CREDS}",
+                    credentialsId: "${DOCKER_HUB_CREDS}",
                     usernameVariable: 'USER',
                     passwordVariable: 'PASS'
                 )]) {
-                    sh "echo $PASS | docker login -u $USER --password-stdin"
+                    sh "echo \$PASS | docker login -u \$USER --password-stdin"
                 }
             }
         }
 
         stage('Push Image') {
             steps {
-                sh "docker push ${IMAGE_TAG}"
+                sh "docker push ${env.IMAGE_TAG}"
+		docker logout
             }
         }
     }
