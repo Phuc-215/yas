@@ -89,7 +89,7 @@ pipeline {
         stage('Push Image') {
             steps {
                 sh "docker push ${env.IMAGE_TAG}"
-		docker logout
+		sh 'docker logout'
             }
         }
     }
