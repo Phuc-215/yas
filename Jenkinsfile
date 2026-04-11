@@ -13,27 +13,49 @@ pipeline {
                 checkout scm
             }
         }
-
-        stage('Get Commit ID') {
+        
+	stage('Prepare') {
             steps {
                 script {
-		    h "git log --oneline -3"
-                    sh "git status"
-
-                    // Lấy commit ID — dùng GIT_COMMIT do Jenkins inject sẵn
-                    // Không cần gọi git rev-parse nữa
-                    def commitId = env.GIT_COMMIT?.take(8)   // Lấy 8 ký tự đầu
-
-                    // Fallback: nếu GIT_COMMIT null thì mới gọi git
-                    if (!commitId) {
-	                    commitId = sh(
-	                        script: "git rev-parse --short HEAD",
-	                        returnStdout: true
-	                    ).trim()
-		    }
-
-		    ennv.COMMIT_ID = commitId
-                    echo "Commit ID: ${env.COMMIT_ID}"
+                    try {
+                        // In toàn bộ env vars Jenkins inject
+                        echo "GIT_COMMIT  : ${env.GIT_COMMIT}"
+                        echo "BRANCH_NAME : ${env.BRANCH_NAME}"
+                        echo "GIT_BRANCH  : ${env.GIT_BRANCH}"
+        
+                        def commitId = env.GIT_COMMIT?.take(8)
+                        echo "commitId sau take(8): ${commitId}"
+        
+                        if (!commitId) {
+                            echo "GIT_COMMIT null, fallback sang git rev-parse"
+                            commitId = sh(
+                                script: "git rev-parse --short HEAD",
+                                returnStdout: true
+                            ).trim()
+                        }
+        
+                        env.COMMIT_ID = commitId
+                        echo "COMMIT_ID cuoi cung: ${env.COMMIT_ID}"
+        
+                        def branchName = env.BRANCH_NAME ?: "unknown"
+                        env.SERVICE = branchName.contains('/')
+                            ? branchName.split('/')[0]
+                            : branchName
+        
+                        env.IMAGE_TAG = "${DOCKER_HUB_USR}/${env.SERVICE}:${env.COMMIT_ID}"
+        
+                        echo "=============================="
+                        echo "Branch  : ${branchName}"
+                        echo "Service : ${env.SERVICE}"
+                        echo "Commit  : ${env.COMMIT_ID}"
+                        echo "Image   : ${env.IMAGE_TAG}"
+                        echo "=============================="
+        
+                    } catch (Exception e) {
+                        echo "ERROR: ${e.getMessage()}"
+                        echo "STACKTRACE: ${e}"
+                        error("Prepare stage failed: ${e.getMessage()}")
+                    }
                 }
             }
         }
@@ -46,7 +68,7 @@ pipeline {
                         ? branchName.split('/')[0]
                         : branchName
 
-                    env.IMAGE_TAG = "${DOCKER_HUB_USR}/${IMAGE_NAME}:${env.COMMIT_ID}"
+                    env.IMAGE_TAG = "${DOCKER_HUB_USR}/${env.SERVICE}:${env.COMMIT_ID}"
                     sh "docker build --build-arg SERVICE=${env.SERVICE} -t ${env.IMAGE_TAG} ."
                 }
             }
