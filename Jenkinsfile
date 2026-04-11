@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_HUB = "bync"
         IMAGE_NAME = "service"
-        DOCKER_CREDS = "DockerHub"
+        DOCKER_CREDS = "dockerhub-repo"
     }
 
     stages {
