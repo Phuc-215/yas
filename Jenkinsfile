@@ -17,10 +17,20 @@ pipeline {
         stage('Get Commit ID') {
             steps {
                 script {
-                    def commitId = sh(
-                        script: "git rev-parse --short HEAD",
-                        returnStdout: true
-                    ).trim()
+		    h "git log --oneline -3"
+                    sh "git status"
+
+                    // Lấy commit ID — dùng GIT_COMMIT do Jenkins inject sẵn
+                    // Không cần gọi git rev-parse nữa
+                    def commitId = env.GIT_COMMIT?.take(8)   // Lấy 8 ký tự đầu
+
+                    // Fallback: nếu GIT_COMMIT null thì mới gọi git
+                    if (!commitId) {
+	                    def commitId = sh(
+	                        script: "git rev-parse --short HEAD",
+	                        returnStdout: true
+	                    ).trim()
+		    }
 
 		    ennv.COMMIT_ID = commitId
                     echo "Commit ID: ${env.COMMIT_ID}"
