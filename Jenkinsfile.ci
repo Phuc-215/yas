@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKERHUB_USR = "bync"
-        DOCKERHUB_CREDS = "dockerhub-repo"
+        DOCKERHUB_CREDS = "dockerhub-credential"
     }
 
     stages {
