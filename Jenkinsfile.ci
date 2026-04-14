@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKERHUB_USR = "bync"
-        DOCKERHUB_CREDS = "dockerhub-credential"
+        DOCKERHUB_CREDS = "dockerhub_credential"
     }
 
     stages {
@@ -81,7 +81,9 @@ pipeline {
                     usernameVariable: 'USER',
                     passwordVariable: 'PASS'
                 )]) {
-                    sh "echo $PASS | docker login -u $USER --password-stdin"
+                    sh '''
+                    echo "$PASS" | docker login -u "$USER" --password-stdin
+                    '''
                 }
             }
         }
