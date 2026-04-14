@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKERHUB_USR = "bync"
-        DOCKERHUB_CREDS = "dockerhub_credential"
+        DOCKERHUB_CREDS = "dockerhub_creds"
     }
 
     stages {
@@ -65,6 +65,24 @@ pipeline {
                 }
             }
         }
+        
+        stage('Build JAR') {
+            steps {
+                script {
+                    def services = env.CHANGED_SERVICES.split(',')
+                    for (service in services) {
+                        echo "Compile ${service}..."
+                        // Chạy Maven Wrapper để build file .jar
+                        // -DskipTests giúp bỏ qua việc chạy unit test để tăng tốc độ build
+                        sh """
+                        cd ${service}
+                        chmod +x mvnw
+                        ./mvnw clean package -f ../pom.xml -pl ${service} -am -DskipTests
+                        """
+                    }
+                }
+            }
+        }
 
         stage('Docker Login') {
             when {
@@ -97,11 +115,19 @@ pipeline {
                         echo "Building ${svc}..."
 
                         sh """
-                        docker build -t ${image}:${COMMIT_ID} -f ${svc}/Dockerfile ./${svc}
+                        docker build \
+                            --cache-from=${image}:latest \
+                            -t ${image}:${COMMIT_ID} \
+                            -f ${svc}/Dockerfile ./${svc}
                         docker tag ${image}:${COMMIT_ID} ${image}:latest
-                        docker push ${image}:${COMMIT_ID}
-                        docker push ${image}:latest
                         """
+                        retry(3) {
+                            sh "docker push ${image}:${COMMIT_ID}"
+                        }
+                        
+                        retry(3) {
+                            sh "docker push ${image}:latest"
+                        }
                     }
                 }
             }
