@@ -17,11 +17,6 @@ pipeline {
         stage('Prepare') {
             steps {
                 script {
-                    // In toàn bộ env vars Jenkins inject
-                    echo "GIT_COMMIT  : ${env.GIT_COMMIT}"
-                    echo "BRANCH_NAME : ${env.BRANCH_NAME}"
-                    echo "GIT_BRANCH  : ${env.GIT_BRANCH}"
-    
                     def commitId = env.GIT_COMMIT?.take(8)
     
                     if (!commitId) {
@@ -102,7 +97,7 @@ pipeline {
                         echo "Building ${svc}..."
 
                         sh """
-                        docker build -t ${image}:${COMMIT_ID} ${svc}
+                        docker build -t ${image}:${COMMIT_ID} -f ${svc}/Dockerfile ./${svc}
                         docker tag ${image}:${COMMIT_ID} ${image}:latest
                         docker push ${image}:${COMMIT_ID}
                         docker push ${image}:latest
@@ -120,7 +115,7 @@ pipeline {
                     def services = env.CHANGED_SERVICES.split(",")
 
                     for (svc in services) {
-                        def image = "${DOCKERHUB_NAMESPACE}/${svc}"
+                        def image = "${DOCKERHUB_USR}/${svc}"
                         sh "docker rmi ${image}:${COMMIT_ID} || true"
                         sh "docker rmi ${image}:latest || true"
                     }
