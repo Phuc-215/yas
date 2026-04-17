@@ -1,148 +1,75 @@
 pipeline {
     agent any
 
-    // Parameters khai báo lại ở đây để Jenkinsfile tự document
     parameters {
         choice(
-            name: 'SERVICE_NAME',
-            choices: [
-                'cart', 'customer', 'delivery', 'inventory',
-                'location', 'media', 'order', 'payment',
-                'payment-paypal', 'product', 'promotion', 'rating',
-                'recommendation', 'search', 'sampledata',
-                'storefront-bff', 'tax', 'webhook', 'backoffice-bff'
-            ],
-            description: 'Service bạn đang phát triển'
-        )
-        string(
-            name: 'SERVICE_BRANCH',
-            defaultValue: 'main',
-            description: 'Branch của service đang phát triển (vd: dev_tax_service)'
-        )
+		name: 'SERVICE_NAME',
+		choices: [
+		        'cart', 'customer', 'delivery', 'inventory',
+		        'location', 'media', 'order', 'payment',
+		        'payment-paypal', 'product', 'promotion', 'rating',
+		        'recommendation', 'search', 'sampledata',
+		        'storefront-bff', 'tax', 'webhook', 'backoffice-bff'
+		],
+		description: 'Service to deploy latest commit'
+	)
     }
 
     environment {
-        DOCKER_HUB   = "bync"
-        DOCKER_CREDS = "dockerhub-repo"
-
-        // Toàn bộ services trong monorepo
-        ALL_SERVICES = "cart customer delivery inventory location media order payment payment-paypal product promotion rating recommendation search sampledata storefront-bff tax webhook backoffice-bff"
+        DOCKERHUB_USR = "bync"
+        NAMESPACE = "yas"
     }
 
     stages {
 
-        stage('Prepare') {
+        stage('Checkout') {
             steps {
-                script {
-                    echo "=============================="
-                    echo "Target Service : ${params.SERVICE_NAME}"
-                    echo "Target Branch  : ${params.SERVICE_BRANCH}"
-                    echo "=============================="
-                }
+                checkout scm
             }
         }
 
-        stage('Build Target Service') {
+        stage('Get Latest Commit ID') {
             steps {
                 script {
-                    // Checkout branch của service đang phát triển
-                    checkout([
-                        $class: 'GitSCM',
-                        branches: [[name: "*/${params.SERVICE_BRANCH}"]],
-                        userRemoteConfigs: [[
-                            url: 'https://github.com/Phuc-215/yas.git',
-                            credentialsId: 'github-repo'
-                        ]]
-                    ])
-
-                    // Lấy commit ID của branch này
-                    env.TARGET_COMMIT = sh(
-                        script: 'git rev-parse --short HEAD',
+                    def commitId = sh(
+                        script: "git rev-parse --short HEAD",
                         returnStdout: true
                     ).trim()
 
-                    env.TARGET_IMAGE = "${DOCKER_HUB}/${params.SERVICE_NAME}:${env.TARGET_COMMIT}"
-
-                    echo "Building: ${env.TARGET_IMAGE}"
-
-                    sh """
-                        docker build \
-                            --build-arg SERVICE=${params.SERVICE_NAME} \
-                            -t ${env.TARGET_IMAGE} \
-                            -t ${DOCKER_HUB}/${params.SERVICE_NAME}:dev-latest \
-                            .
-                    """
+                    env.COMMIT_ID = commitId
+                    echo "Latest commit: ${env.COMMIT_ID}"
                 }
             }
         }
 
-        stage('Push Target Service') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: "${DOCKER_CREDS}",
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-                    sh "docker push ${env.TARGET_IMAGE}"
-                    sh "docker push ${DOCKER_HUB}/${params.SERVICE_NAME}:dev-latest"
-                    sh 'docker logout'
-                }
-            }
-        }
-
-        stage('Deploy All Services') {
+        stage('Deploy Services') {
             steps {
                 script {
-                    def allServices = env.ALL_SERVICES.split(' ')
+                    // Danh sách toàn bộ services
+                    def allServices = [
+                        "cart","customer","inventory","location",
+                        "media","order","payment","payment-paypal",
+                        "product","promotion","rating","search",
+                        "tax","recommendation","webhook","sampledata"
+                    ]
+
                     def targetService = params.SERVICE_NAME
-                    def composeContent = generateDockerCompose(allServices, targetService, env.TARGET_COMMIT)
 
-                    // Ghi docker-compose.deploy.yml
-                    writeFile file: 'docker-compose.deploy.yml', text: composeContent
-                    echo "Generated docker-compose.deploy.yml:"
-                    sh 'cat docker-compose.deploy.yml'
+                    for (svc in allServices) {
 
-                    // Deploy
-                    sh 'docker compose -f docker-compose.deploy.yml up -d --pull always'
+                        def tag = (svc == targetService) ? env.COMMIT_ID : "latest"
+
+                        echo "Deploying ${svc} with tag ${tag}"
+
+                        sh """
+                        helm upgrade --install ${svc} ./charts/${svc} \
+                        --namespace ${NAMESPACE} --create-namespace \
+                        --set backend.image.repository=${DOCKERHUB_USR}/${svc} \
+                        --set backend.image.tag=${tag}
+                        """
+                    }
                 }
             }
         }
     }
-
-    post {
-        success {
-            echo "✅ Deploy thành công!"
-            echo "Target: ${env.TARGET_IMAGE}"
-            echo "Others: ${DOCKER_HUB}/<service>:latest"
-        }
-        failure {
-            echo "❌ Deploy thất bại!"
-        }
-        always {
-            sh "docker rmi ${env.TARGET_IMAGE} || true"
-            sh "docker rmi ${DOCKER_HUB}/${params.SERVICE_NAME}:dev-latest || true"
-        }
-    }
-}
-
-// ── Helper: Generate docker-compose.deploy.yml ───────────────────
-def generateDockerCompose(String[] services, String targetService, String targetCommit) {
-    def lines = []
-    lines << "services:"
-
-    services.each { service ->
-        def tag   = (service == targetService) ? targetCommit : "latest"
-        def image = "bync/${service}:${tag}"
-
-        lines << "  ${service}:"
-        lines << "    image: ${image}"
-        lines << "    container_name: ${service}"
-        lines << "    restart: unless-stopped"
-        lines << "    ports:"
-        lines << "      - \"0:8080\"    # Random port để tránh conflict"
-        lines << ""
-    }
-
-    return lines.join('\n')
 }
