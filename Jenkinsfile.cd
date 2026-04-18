@@ -20,23 +20,25 @@ pipeline {
         USERNAME = "Phuc-215"
     }
 
-    stage('Update image tag in Git') {
-        steps {
-            script {
-                def commitId = env.GIT_COMMIT.take(7)
-                def service  = params.SERVICE_NAME  // ví dụ: "product"
+    stages {
+        stage('Update image tag in Git') {
+            steps {
+                script {
+                    def commitId = env.GIT_COMMIT.take(7)
+                    def service  = params.SERVICE_NAME  // ví dụ: "product"
 
-                sh """
-                    git config user.email "${EMAIL}"
-                    git config user.name  "${USERNAME}"
+                    sh """
+                        git config user.email "${EMAIL}"
+                        git config user.name  "${USERNAME}"
 
-                    # Cập nhật tag trong values.yaml của service
-                    yq -i '.image.tag = "${commitId}"' k8s/charts/${service}/values.yaml
+                        # Cập nhật tag trong values.yaml của service
+                        yq -i '.image.tag = "${commitId}"' k8s/charts/${service}/values.yaml
 
-                    git add k8s/charts/${service}/values.yaml
-                    git commit -m "update ${service} image tag to ${commitId} [cd job]"
-                    git push origin HEAD:dev
-                """
+                        git add k8s/charts/${service}/values.yaml
+                        git commit -m "update ${service} image tag to ${commitId} [cd job]"
+                        git push origin HEAD:dev
+                    """
+                }
             }
         }
     }
