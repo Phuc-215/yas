@@ -3,72 +3,40 @@ pipeline {
 
     parameters {
         choice(
-		name: 'SERVICE_NAME',
-		choices: [
-		        'cart', 'customer', 'delivery', 'inventory',
-		        'location', 'media', 'order', 'payment',
-		        'payment-paypal', 'product', 'promotion', 'rating',
-		        'recommendation', 'search', 'sampledata',
-		        'storefront-bff', 'tax', 'webhook', 'backoffice-bff'
-		],
-		description: 'Service to deploy latest commit'
-	)
+            name: 'SERVICE_NAME',
+            choices: [
+                'cart', 'customer', 'delivery', 'inventory',
+                'location', 'media', 'order', 'payment',
+                'payment-paypal', 'product', 'promotion', 'rating',
+                'recommendation', 'search', 'sampledata',
+                'storefront-bff', 'tax', 'webhook', 'backoffice-bff'
+            ],
+            description: 'Service to deploy latest commit'
+        )
     }
 
     environment {
-        DOCKERHUB_USR = "bync"
-        NAMESPACE = "yas"
+        EMAIL = "ntphuc23@clc.fitus.edu.vn"
+        USERNAME = "Phuc-215"
     }
 
-    stages {
+    stage('Update image tag in Git') {
+        steps {
+            script {
+                def commitId = env.GIT_COMMIT.take(7)
+                def service  = params.SERVICE_NAME  // ví dụ: "product"
 
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
+                sh """
+                    git config user.email "${EMAIL}"
+                    git config user.name  "${USERNAME}"
 
-        stage('Get Latest Commit ID') {
-            steps {
-                script {
-                    def commitId = sh(
-                        script: "git rev-parse --short HEAD",
-                        returnStdout: true
-                    ).trim()
+                    # Cập nhật tag trong values.yaml của service
+                    yq -i '.image.tag = "${commitId}"' k8s/charts/${service}/values.yaml
 
-                    env.COMMIT_ID = commitId
-                    echo "Latest commit: ${env.COMMIT_ID}"
-                }
-            }
-        }
-
-        stage('Deploy Services') {
-            steps {
-                script {
-                    // Danh sách toàn bộ services
-                    def allServices = [
-                        "cart","customer","inventory","location",
-                        "media","order","payment","payment-paypal",
-                        "product","promotion","rating","search",
-                        "tax","recommendation","webhook","sampledata"
-                    ]
-
-                    def targetService = params.SERVICE_NAME
-
-                    for (svc in allServices) {
-
-                        def tag = (svc == targetService) ? env.COMMIT_ID : "latest"
-
-                        echo "Deploying ${svc} with tag ${tag}"
-
-                        sh """
-                        helm upgrade --install ${svc} ./charts/${svc} \
-                        --namespace ${NAMESPACE} --create-namespace \
-                        --set backend.image.repository=${DOCKERHUB_USR}/${svc} \
-                        --set backend.image.tag=${tag}
-                        """
-                    }
-                }
+                    git add k8s/charts/${service}/values.yaml
+                    git commit -m "update ${service} image tag to ${commitId} [cd job]"
+                    git push origin HEAD:dev
+                """
             }
         }
     }
