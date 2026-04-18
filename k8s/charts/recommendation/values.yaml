@@ -19,5 +19,3 @@ backend:
       mountPath: /opt/yas/recommendation
   extraApplicationConfigPaths:
     - /opt/yas/recommendation/recommendation-application.yaml
-image:
-  tag: bf400fc
