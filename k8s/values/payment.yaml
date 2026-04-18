@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: yas-product
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Phuc-215/yas.git
+    targetRevision: HEAD
+    path: k8s/charts/payment
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: yas
+  syncPolicy:
+    automated:
+      prune: true        # xóa resource không còn trong Git
+      selfHeal: true     # tự rollback nếu ai sửa tay trên cluster
+    syncOptions:
+      - CreateNamespace=true
