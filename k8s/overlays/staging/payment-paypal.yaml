@@ -1,4 +1,6 @@
-image:
-  repository: bync/payment-paypal
-  tag: v1.0.0
-replicaCount: 1
+backend:
+  image:
+    tag: v1.0.0
+  ingress:
+    enabled: true
+    host: payment-paypal.yas.local.com

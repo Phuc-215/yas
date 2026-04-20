@@ -1,4 +1,6 @@
-image:
-  repository: bync/product
-  tag: latest
-replicaCount: 1
+backend:
+  image:
+    tag: latest
+  ingress:
+    enabled: true
+    host: product.yas.local.com

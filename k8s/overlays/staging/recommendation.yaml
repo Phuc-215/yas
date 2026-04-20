@@ -1,4 +1,6 @@
-image:
-  repository: phuc215/recommendation
-  tag: v1.0.0
-replicaCount: 1
+backend:
+  image:
+    tag: v1.0.0
+  ingress:
+    enabled: true
+    host: recommendation.yas.local.com

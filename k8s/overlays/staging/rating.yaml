@@ -1,4 +1,6 @@
-image:
-  repository: bync/rating
-  tag: v1.0.0
-replicaCount: 1
+backend:
+  image:
+    tag: v1.0.0
+  ingress:
+    enabled: true
+    host: rating.yas.local.com

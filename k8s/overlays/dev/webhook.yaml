@@ -1,4 +1,6 @@
-image:
-  repository: bync/webhook
-  tag: latest
-replicaCount: 1
+backend:
+  image:
+    tag: latest
+  ingress:
+    enabled: true
+    host: webhook.yas.local.com
