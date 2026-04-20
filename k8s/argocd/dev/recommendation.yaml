@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: yas-recommendation
+  name: dev-recommendation
   namespace: argocd
 spec:
   project: default
@@ -11,13 +11,13 @@ spec:
     path: k8s/charts/recommendation
     helm:
       valueFiles:
-        - values.yaml
+        - ../../overlays/dev/recommendation.yaml
   destination:
     server: https://kubernetes.default.svc
-    namespace: yas
+    namespace: dev
   syncPolicy:
     automated:
-      prune: true        # xóa resource không còn trong Git
-      selfHeal: true     # tự rollback nếu ai sửa tay trên cluster
+      prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true

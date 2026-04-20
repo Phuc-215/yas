@@ -1,0 +1,4 @@
+image:
+  repository: bync/media
+  tag: v1.0.0
+replicaCount: 1

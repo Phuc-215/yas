@@ -1,0 +1,4 @@
+image:
+  repository: bync/payment-paypal
+  tag: latest
+replicaCount: 1

@@ -1,0 +1,4 @@
+image:
+  repository: bync/cart
+  tag: latest
+replicaCount: 1

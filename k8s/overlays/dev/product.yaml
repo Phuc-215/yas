@@ -1,0 +1,4 @@
+image:
+  repository: bync/product
+  tag: latest
+replicaCount: 1

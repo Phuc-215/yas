@@ -1,0 +1,4 @@
+image:
+  repository: bync/inventory
+  tag: latest
+replicaCount: 1

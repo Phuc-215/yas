@@ -1,0 +1,4 @@
+image:
+  repository: bync/payment
+  tag: latest
+replicaCount: 1

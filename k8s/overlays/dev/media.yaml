@@ -1,0 +1,4 @@
+image:
+  repository: bync/media
+  tag: latest
+replicaCount: 1

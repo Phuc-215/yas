@@ -1,0 +1,4 @@
+image:
+  repository: bync/backoffice-bff
+  tag: latest
+replicaCount: 1

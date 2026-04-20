@@ -1,0 +1,4 @@
+image:
+  repository: bync/location
+  tag: latest
+replicaCount: 1

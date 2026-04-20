@@ -1,0 +1,4 @@
+image:
+  repository: bync/order
+  tag: latest
+replicaCount: 1
