@@ -1,0 +1,154 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'SERVICE_NAME', defaultValue: 'tax', description: 'Name of Service (vd: tax)')
+        string(name: 'BRANCH_NAME', defaultValue: 'dev', description: 'Branch of Service (vd: dev-tax-service)')
+    }
+
+    environment {
+        NAMESPACE      = 'yas'
+        DOCKERHUB_USER = 'bync'
+        CHARTS_PATH    = 'k8s/charts'
+        OVERLAYS_PATH  = 'k8s/overlays/dev'
+        WORKER_NODE_IP = '192.168.122.169'
+        GITHUB_CREDS   = 'github-credentials'
+        REPO_URL       = 'https://github.com/Phuc-215/yas.git'
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git branch: "${params.BRANCH_NAME}",
+                    url: "${REPO_URL}",
+                    credentialsId: "${GITHUB_CREDS}"
+            }
+        }
+
+        stage('Get commit ID') {
+            steps {
+                script {
+                    env.COMMIT_ID = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+                    echo "Commit ID: ${env.COMMIT_ID}"
+                }
+            }
+        }
+
+        stage('Update overlay for selected service') {
+            steps {
+                script {
+                    def svc         = params.SERVICE_NAME
+                    def overlayFile = "${OVERLAYS_PATH}/${svc}.yaml"
+ 
+                    withCredentials([usernamePassword(
+                        credentialsId: GITHUB_CREDS,
+                        usernameVariable: 'GIT_USER',
+                        passwordVariable: 'GIT_TOKEN'
+                    )]) {
+                        sh """
+                            git fetch origin main
+                            git checkout -B main origin/main
+                            git config user.email "jenkins@yas.local"
+                            git config user.name  "Jenkins"
+ 
+                            # Đảm bảo overlay file tồn tại
+                            if [ ! -f ${overlayFile} ]; then
+                                mkdir -p ${OVERLAYS_PATH}
+                                cat > ${overlayFile} <<EOF
+backend:
+  image:
+    tag: latest
+  ingress:
+    enabled: true
+    host: ${svc}.yas.local.com
+EOF
+                            fi
+ 
+                            # Cập nhật tag của service được chọn sang commit id
+                            yq -i '.backend.image.tag = "${env.COMMIT_ID}"' ${overlayFile}
+ 
+                            git add ${overlayFile}
+                            git diff --cached --quiet || git commit -m "cd: [dev] update ${svc} image tag to ${env.COMMIT_ID} [skip ci]"
+                            git push https://\${GIT_USER}:\${GIT_TOKEN}@github.com/Phuc-215/yas.git main
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Wait for ArgoCD sync') {
+            steps {
+                script {
+                    def svc = params.SERVICE_NAME
+                    echo "Waiting for ArgoCD to sync dev-${svc}..."
+                    sh """
+                        argocd app wait dev-${svc} \
+                            --sync \
+                            --health \
+                            --timeout 180 \
+                            --grpc-web || true
+                    """
+                }
+            }
+        }
+ 
+        stage('Get access info') {
+            steps {
+                script {
+                    def svc = params.SERVICE_NAME
+ 
+                    // Lấy NodePort của service
+                    def nodePort = sh(
+                        script: """
+                            kubectl get svc ${svc} -n ${NAMESPACE} \
+                                -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo ''
+                        """,
+                        returnStdout: true
+                    ).trim()
+ 
+                    def domain = "${svc}.yas.local.com"
+ 
+                    if (nodePort) {
+                        echo """
+                        ============================================
+                        Deploy thành công!
+ 
+                        Service : ${svc}
+                        Tag     : ${env.COMMIT_ID}
+ 
+                        Thêm dòng sau vào file hosts của bạn:
+                        ${WORKER_NODE_IP}  ${domain}
+ 
+                        Truy cập tại: http://${domain}:${nodePort}
+                        ============================================
+                        """
+                        currentBuild.description = "<a href='http://${domain}:${nodePort}'>http://${domain}:${nodePort}</a>"
+                    } else {
+                        echo """
+                        ============================================
+                        Overlay đã được cập nhật!
+ 
+                        Service : ${svc}
+                        Tag     : ${env.COMMIT_ID}
+ 
+                        ArgoCD đang sync... Truy cập ArgoCD để theo dõi:
+                        http://argocd.yas.local.com
+                        ============================================
+                        """
+                        currentBuild.description = "Overlay updated: ${svc}:${env.COMMIT_ID}"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo "Deploy thất bại. Kiểm tra logs ở trên."
+        }
+    }
+}
