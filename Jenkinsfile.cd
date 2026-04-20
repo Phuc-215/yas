@@ -2,44 +2,126 @@ pipeline {
     agent any
 
     parameters {
-        choice(
-            name: 'SERVICE_NAME',
-            choices: [
-                'cart', 'customer', 'delivery', 'inventory',
-                'location', 'media', 'order', 'payment',
-                'payment-paypal', 'product', 'promotion', 'rating',
-                'recommendation', 'search', 'sampledata',
-                'storefront-bff', 'tax', 'webhook', 'backoffice-bff'
-            ],
-            description: 'Service to deploy latest commit'
-        )
+        string(name: 'SERVICE_NAME', defaultValue: 'tax', description: 'Name of Service (vd: tax)')
+        string(name: 'BRANCH_NAME', defaultValue: 'dev', description: 'Branch of Service (vd: dev-tax-service)')
     }
 
     environment {
-        EMAIL = "ntphuc23@clc.fitus.edu.vn"
-        USERNAME = "Phuc-215"
+        NAMESPACE        = 'yas'
+        DOCKERHUB_USER   = 'bync'
+	CHARTS_PATH      = 'k8s/charts'
+        WORKER_NODE_IP   = '192.168.122.169'
     }
 
     stages {
-        stage('Update image tag in Git') {
+
+        stage('Checkout') {
+            steps {
+                git branch: "${params.BRANCH_NAME}",
+                    url: 'https://github.com/Phuc-215/yas.git',
+                    credentialsId: 'github-credentials'
+            }
+        }
+
+        stage('Get commit ID') {
             steps {
                 script {
-                    def commitId = env.GIT_COMMIT.take(7)
-                    def service  = params.SERVICE_NAME  // ví dụ: "product"
+                    env.COMMIT_ID = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+                    echo "Commit ID: ${env.COMMIT_ID}"
+                }
+            }
+        }
 
+        stage('Get all services') {
+            steps {
+                script {
+                    env.ALL_SERVICES = sh(
+                        script: "ls ${CHARTS_PATH}",
+                        returnStdout: true
+                    ).trim()
+                    echo "All services: ${env.ALL_SERVICES}"
+                }
+            }
+        }
+
+        stage('Deploy all services with latest') {
+            steps {
+                script {
+                    def services = env.ALL_SERVICES.split('\n')
+                    for (svc in services) {
+                        svc = svc.trim()
+                        if (svc == params.SERVICE_NAME) continue
+
+                        echo "Deploying ${svc} with tag: latest"
+                        sh """
+                            helm upgrade --install ${svc} ${CHARTS_PATH}/${svc} \
+                                --namespace ${NAMESPACE} \
+                                --create-namespace \
+                                --set image.repository=${DOCKERHUB_USER}/${svc} \
+                                --set image.tag=latest \
+                                --wait --timeout 3m \
+                                || true
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Deploy selected service with commit ID') {
+            steps {
+                script {
+                    def svc = params.SERVICE_NAME
+                    echo "Deploying ${svc} with tag: ${env.COMMIT_ID}"
                     sh """
-                        git config user.email "${EMAIL}"
-                        git config user.name  "${USERNAME}"
-
-                        # Cập nhật tag trong values.yaml của service
-                        yq -i '.image.tag = "${commitId}"' k8s/charts/${service}/values.yaml
-
-                        git add k8s/charts/${service}/values.yaml
-                        git commit -m "update ${service} image tag to ${commitId} [cd job]"
-                        git push origin HEAD:dev
+                        helm upgrade --install ${svc} ${CHARTS_PATH}/${svc} \
+                            --namespace ${NAMESPACE} \
+                            --create-namespace \
+                            --set image.repository=${DOCKERHUB_USER}/${svc} \
+                            --set image.tag=${env.COMMIT_ID} \
+                            --set service.type=NodePort \
+                            --wait --timeout 3m
                     """
                 }
             }
+        }
+
+        stage('Get access info') {
+            steps {
+                script {
+                    def nodePort = sh(
+                        script: """
+                            kubectl get svc ${params.SERVICE_NAME} -n ${NAMESPACE} \
+                                -o jsonpath='{.spec.ports[0].nodePort}'
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    def domain = "${params.SERVICE_NAME}.yas.local.com"
+
+                    echo """
+                    ============================================
+                    Deploy thành công!
+                    
+                    Thêm dòng sau vào file hosts của bạn:
+                    ${WORKER_NODE_IP}  ${domain}
+                    
+                    Truy cập tại: http://${domain}:${nodePort}
+                    ============================================
+                    """
+
+                    // Hiển thị như hyperlink trên Jenkins UI
+                    currentBuild.description = "<a href='http://${domain}:${nodePort}'>http://${domain}:${nodePort}</a>"
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo "Deploy thất bại. Kiểm tra logs ở trên."
         }
     }
 }
