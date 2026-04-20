@@ -1,93 +1,52 @@
 pipeline {
     agent any
-
-    environment {
-        NAMESPACE     = 'yas'
-        OVERLAYS_PATH = 'k8s/overlays/dev'
-        GITHUB_CREDS  = 'github-credentials'
-        REPO_URL      = 'https://github.com/Phuc-215/yas.git'
+    parameters {
+        string(name: 'SERVICE_NAME', defaultValue: '', description: 'Name of removed service. Empty to remove all.')
     }
-
+    environment {
+        NAMESPACE  = 'yas'
+        CHARTS_PATH = 'k8s/charts'
+    }
     stages {
-        
         stage('Checkout') {
             steps {
-                git branch: 'main',
-                    url: "${REPO_URL}",
-                    credentialsId: "${GITHUB_CREDS}"
+                git branch: 'dev',
+                    url: 'https://github.com/Phuc-215/yas.git',
+                    credentialsId: 'github-credentials'
             }
         }
-
-        stage('Reset overlay tag to latest') {
+        stage('Cleanup') {
             steps {
                 script {
-                    withCredentials([usernamePassword(
-                        credentialsId: GITHUB_CREDS,
-                        usernameVariable: 'GIT_USER',
-                        passwordVariable: 'GIT_TOKEN'
-                    )]) {
+                    if (params.SERVICE_NAME?.trim()) {
+                        echo "Xóa service: ${params.SERVICE_NAME}"
                         sh """
-                            git fetch origin main
-                            git checkout -B main origin/main
-                            git config user.email "jenkins@yas.local"
-                            git config user.name  "Jenkins"
+                            helm uninstall ${params.SERVICE_NAME} \
+                                --namespace ${NAMESPACE} \
+                                --ignore-not-found || true
                         """
- 
-                        if (params.SERVICE_NAME?.trim()) {
-                            def svc         = params.SERVICE_NAME.trim()
-                            def overlayFile = "${OVERLAYS_PATH}/${svc}.yaml"
-                            echo "Resetting ${svc} → latest"
-                            sh "yq -i '.backend.image.tag = \"latest\"' ${overlayFile}"
+                    } else {
+                        echo "Xóa tất cả services trong namespace ${NAMESPACE}"
+                        def services = sh(
+                            script: "ls ${CHARTS_PATH}",
+                            returnStdout: true
+                        ).trim().split('\n')
+                        for (svc in services) {
                             sh """
-                                git add ${overlayFile}
-                                git diff --cached --quiet || git commit -m "cd: [dev] reset ${svc} image tag to latest [skip ci]"
-                            """
-                        } else {
-                            echo "Resetting all services → latest"
-                            sh """
-                                for file in ${OVERLAYS_PATH}/*.yaml; do
-                                    yq -i '.backend.image.tag = "latest"' "\$file"
-                                done
-                                git add ${OVERLAYS_PATH}/
-                                git diff --cached --quiet || git commit -m "cd: [dev] reset all services image tag to latest [skip ci]"
+                                helm uninstall ${svc.trim()} \
+                                    --namespace ${NAMESPACE} \
+                                    --ignore-not-found || true
                             """
                         }
- 
-                        sh "git push https://\${GIT_USER}:\${GIT_TOKEN}@github.com/Phuc-215/yas.git main"
                     }
                 }
             }
         }
-
-        stage('Delete ArgoCD Applications') {
-            steps {
-                script {
-	        sh """
-	            argocd app list --grpc-web -o name \
-	                | grep '^dev-' \
-	                | xargs -I {} argocd app delete {} \
-	                    --cascade \
-	                    --yes \
-	                    --grpc-web
-	        """
-                }
-            }
-        }
-
         stage('Verify') {
             steps {
+                sh "helm list -n ${NAMESPACE}"
                 sh "kubectl get pods -n ${NAMESPACE}"
-                sh "argocd app list --grpc-web | grep dev- || echo 'Không còn Application dev nào.'"
             }
-        }
-    }
-
-    post {
-        success {
-            echo "Reset thành công."
-        }
-        failure {
-            echo "Reset thất bại."
         }
     }
 }
