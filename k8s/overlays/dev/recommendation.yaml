@@ -1,0 +1,4 @@
+image:
+  repository: phuc215/recommendation
+  tag: latest
+replicaCount: 1
