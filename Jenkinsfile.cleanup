@@ -1,0 +1,58 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'SERVICE_NAME', defaultValue: '', description: 'Name of removed service. Empty to remove all.')
+    }
+
+    environment {
+        NAMESPACE  = 'yas'
+        CHARTS_PATH = 'k8s/charts'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'dev',
+                    url: 'https://github.com/Phuc-215/yas.git',
+                    credentialsId: 'github-credentials'
+            }
+        }
+
+        stage('Cleanup') {
+            steps {
+                script {
+                    if (params.SERVICE_NAME?.trim()) {
+                        echo "Xóa service: ${params.SERVICE_NAME}"
+                        sh """
+                            helm uninstall ${params.SERVICE_NAME} \
+                                --namespace ${NAMESPACE} \
+                                --ignore-not-found || true
+                        """
+                    } else {
+                        echo "Xóa tất cả services trong namespace ${NAMESPACE}"
+                        def services = sh(
+                            script: "ls ${CHARTS_PATH}",
+                            returnStdout: true
+                        ).trim().split('\n')
+
+                        for (svc in services) {
+                            sh """
+                                helm uninstall ${svc.trim()} \
+                                    --namespace ${NAMESPACE} \
+                                    --ignore-not-found || true
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                sh "helm list -n ${NAMESPACE}"
+                sh "kubectl get pods -n ${NAMESPACE}"
+            }
+        }
+    }
+}
