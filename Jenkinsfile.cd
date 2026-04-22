@@ -9,7 +9,7 @@ pipeline {
     environment {
         NAMESPACE        = 'yas'
         DOCKERHUB_USER   = 'bync'
-	CHARTS_PATH      = 'k8s/charts'
+	    CHARTS_PATH      = 'k8s/charts'
         WORKER_NODE_IP   = '192.168.122.169'
     }
 

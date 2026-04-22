@@ -1,3 +1,4 @@
+# Trigger CI job to build image
 FROM eclipse-temurin:21-jre-alpine
 RUN apk add --no-cache bash
 COPY target/search*.jar app.jar
