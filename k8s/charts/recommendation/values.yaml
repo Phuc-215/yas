@@ -1,7 +1,7 @@
 backend:
   image:
-    repository: ghcr.io/nashtech-garage/yas-recommendation
-    tag: e485dc8
+    repository: bync/recommendation
+    tag: latest
   nameOverride: recommendation
   fullnameOverride: recommendation
   databaseName: recommendation
