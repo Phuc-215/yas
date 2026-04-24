@@ -1,0 +1,14 @@
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: yas-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - 192.168.232.200-192.168.232.210
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: yas-l2
+  namespace: metallb-system

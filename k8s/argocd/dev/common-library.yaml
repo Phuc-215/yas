@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-common-library
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Phuc-215/yas.git
+    targetRevision: HEAD
+    path: k8s/charts/common-library
+    helm:
+      valueFiles:
+        - ../../overlays/dev/common-library.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    automated:
+      prune: true        # xóa resource không còn trong Git
+      selfHeal: true     # tự rollback nếu ai sửa tay trên cluster
+    syncOptions:
+      - CreateNamespace=true

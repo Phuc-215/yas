@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-recommendation
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Phuc-215/yas.git
+    targetRevision: HEAD
+    path: k8s/charts/recommendation
+    helm:
+      valueFiles:
+        - ../../overlays/dev/recommendation.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
