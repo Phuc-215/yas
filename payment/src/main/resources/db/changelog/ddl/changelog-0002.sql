@@ -1,7 +1,7 @@
 
 create table payment_provider (
    id                           varchar(255) not null,
-   enabled                      boolean,
+   enabled                      boolean,  --Set column name to "enabled" initially
    name                         varchar(255),
    configure_url                varchar(255),
    landing_view_component_name  varchar(255),
