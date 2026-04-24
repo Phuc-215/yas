@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKERHUB_USR = "bync"
-        DOCKERHUB_CREDS = "dockerhub_creds"
+        DOCKERHUB_CREDS = "dockerhub-credentials"
     }
 
     stages {
@@ -75,9 +75,8 @@ pipeline {
                         // Chạy Maven Wrapper để build file .jar
                         // -DskipTests giúp bỏ qua việc chạy unit test để tăng tốc độ build
                         sh """
-                        cd ${service}
                         chmod +x mvnw
-                        ./mvnw clean package -f ../pom.xml -pl ${service} -am -DskipTests
+                        ./mvnw clean package -pl ${service} -am -DskipTests
                         """
                     }
                 }
