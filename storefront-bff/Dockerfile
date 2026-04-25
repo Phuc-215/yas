@@ -1,4 +1,4 @@
-# Trigger CI job to rebuild image
+# Trigger Jenkins CI job to rebuild image
 FROM eclipse-temurin:21-jre-alpine
 RUN apk add --no-cache bash
 COPY wait-for-it.sh wait-for-it.sh
