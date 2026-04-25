@@ -1,4 +1,4 @@
-# Trigger Jenkins CI job to rebuild image
+
 FROM eclipse-temurin:21-jre-alpine
 
 COPY target/order*.jar app.jar
