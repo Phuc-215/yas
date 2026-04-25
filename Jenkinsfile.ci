@@ -76,7 +76,7 @@ pipeline {
                         // -DskipTests giúp bỏ qua việc chạy unit test để tăng tốc độ build
                         sh """
                         chmod +x mvnw
-                        ./mvnw clean package -pl ${service} -am -DskipTests
+                        ./mvnw clean install -pl ${service} -am -DskipTests
                         """
                     }
                 }
@@ -115,7 +115,7 @@ pipeline {
 
                         sh """
                         docker build \
-                            --cache-from=${image}:latest \
+                            --no-cache \
                             -t ${image}:${COMMIT_ID} \
                             -f ${svc}/Dockerfile ./${svc}
                         docker tag ${image}:${COMMIT_ID} ${image}:latest
