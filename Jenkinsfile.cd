@@ -57,11 +57,13 @@ pipeline {
 
                         echo "Deploying ${svc} with tag: latest"
                         sh """
+                            helm dependency build ${CHARTS_PATH}/${svc} --skip-refresh || true
                             helm upgrade --install ${svc} ${CHARTS_PATH}/${svc} \
                                 --namespace ${NAMESPACE} \
                                 --create-namespace \
-                                --set image.repository=${DOCKERHUB_USER}/${svc} \
-                                --set image.tag=latest \
+                                --set backend.image.repository=${DOCKERHUB_USER}/${svc} \
+                                --set backend.image.tag=latest \
+                                --set backend.ingress.host=api.yas.local.com \
                                 --wait --timeout 3m \
                                 || true
                         """
@@ -76,11 +78,13 @@ pipeline {
                     def svc = params.SERVICE_NAME
                     echo "Deploying ${svc} with tag: ${env.COMMIT_ID}"
                     sh """
+                        helm dependency build ${CHARTS_PATH}/${svc} --skip-refresh || true
                         helm upgrade --install ${svc} ${CHARTS_PATH}/${svc} \
                             --namespace ${NAMESPACE} \
                             --create-namespace \
-                            --set image.repository=${DOCKERHUB_USER}/${svc} \
-                            --set image.tag=${env.COMMIT_ID} \
+                            --set backend.image.repository=${DOCKERHUB_USER}/${svc} \
+                            --set backend.image.tag=${env.COMMIT_ID} \
+                            --set backend.ingress.host=api.yas.local.com \
                             --set service.type=NodePort \
                             --wait --timeout 3m
                     """
