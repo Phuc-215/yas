@@ -47,6 +47,16 @@ pipeline {
             }
         }
 
+        stage('Deploy Configuration') {
+            steps {
+                sh '''
+                    helm dependency build ../charts/yas-configuration
+                    helm upgrade --install yas-configuration ../charts/yas-configuration \
+                        --namespace yas --create-namespace
+                '''
+            }
+        }
+
         stage('Deploy all services with latest') {
             steps {
                 script {
