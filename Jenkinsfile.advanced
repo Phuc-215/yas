@@ -4,8 +4,7 @@ pipeline {
     environment {
         DOCKERHUB_USR = "bync"
         DOCKERHUB_CREDS = "dockerhub-credentials"
-	GITHUB_CREDS   = "github-credentials"
-	OVERLAYS_PATH  = "k8s/overlays"
+        GITHUB_CREDS   = "github-credentials"
     }
 
     stages {
@@ -29,7 +28,7 @@ pipeline {
                     }
                     env.COMMIT_ID = commitId
 
-		    def gitTag = sh(
+		            def gitTag = sh(
                         script: "git tag --points-at HEAD | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+' || true",
                         returnStdout: true
                     ).trim()
@@ -52,16 +51,16 @@ pipeline {
             steps {
                 script {
                     if (env.DEPLOY_ENV == "staging") {
-                        // Staging: build tất cả services
+                        // Staging: build all services
                         def allServices = sh(
                             script: "find . -name Dockerfile -not -path '*/node_modules/*' | sed 's|/Dockerfile||' | sed 's|^./||'",
                             returnStdout: true
                         ).trim().split("\n")
  
-                        env.BUILT_SERVICES = allServices.join(",")
-                        echo "Staging release → build all services: ${env.BUILT_SERVICES}"
+                        env.CHANGED_SERVICES = allServices.join(",")
+                        echo "Staging release → build all services: ${env.CHANGED_SERVICES}"
                     } else {
-                        Dev: chỉ build service có thay đổi
+                        // Dev: only build changed service
                         def changedFiles = sh(
                             script: "git diff --name-only HEAD~1 HEAD",
                             returnStdout: true
@@ -84,23 +83,25 @@ pipeline {
                             return
                         }
  
-                        env.BUILT_SERVICES = services.join(",")
-                        echo "Changed services: ${env.BUILT_SERVICES}"
+                        env.CHANGED_SERVICES = services.join(",")
+                        echo "Changed services: ${env.CHANGED_SERVICES}"
                     }
                 }
             }
         }
         
         stage('Build JAR') {
+            when {
+                expression { return env.CHANGED_SERVICES != null }
+            }
             steps {
                 script {
-                    def services = env.BUILT_SERVICES.split(',')
+                    def services = env.CHANGED_SERVICES.split(',')
                     for (service in services) {
                         echo "Compile ${service}..."
                         sh """
-                        cd ${service}
                         chmod +x mvnw
-                        ./mvnw clean package -f ../pom.xml -pl ${service} -am -DskipTests
+                        ./mvnw clean package -pl ${service} -am -DskipTests
                         """
                     }
                 }
@@ -109,7 +110,7 @@ pipeline {
 
         stage('Docker Login') {
             when {
-                expression { return env.BUILT_SERVICES != null }
+                expression { return env.CHANGED_SERVICES != null }
             }
             steps {
                 withCredentials([usernamePassword(
@@ -126,11 +127,11 @@ pipeline {
 
         stage('Build & Push Images') {
             when {
-                expression { return env.BUILT_SERVICES != null }
+                expression { return env.CHANGED_SERVICES != null }
             }
             steps {
                 script {
-                    def services = env.BUILT_SERVICES.split(",")
+                    def services = env.CHANGED_SERVICES.split(",")
 
                     for (svc in services) {
                         def image = "${DOCKERHUB_USR}/${svc}"
@@ -150,37 +151,73 @@ pipeline {
                             sh "docker tag ${image}:${env.IMAGE_TAG} ${image}:latest"
                             retry(3) {
                                 sh "docker push ${image}:latest"
-			    }
-			}
-		    }
-		}
+			                }
+			            }
+		            }
+		        }
+	        }
 	    }
-	}
+
+        stage('Update Overlay & Push Git') {
+            when {
+                expression { return env.CHANGED_SERVICES != null }
+            }
+            steps {
+                script {
+                    def services = env.CHANGED_SERVICES.split(",")
+                    withCredentials([usernamePassword(
+                        credentialsId: 'github-credentials',
+                        usernameVariable: 'GIT_USER',
+                        passwordVariable: 'GIT_TOKEN'
+                    )]) {
+                        sh """
+                            git fetch origin main
+                            git checkout -B main origin/main
+                            git config user.email "jenkins@yas.local"
+                            git config user.name  "Jenkins"
+                        """
+                        for (svc in services) {
+                            svc = svc.trim()
+                            sh """
+                                yq -i '.backend.image.tag = "${env.IMAGE_TAG}"' \
+                                    overlays/${env.DEPLOY_ENV}/${svc}.yaml
+                            """
+                        }
+                        sh """
+                            git add overlays/${env.DEPLOY_ENV}/
+                            git diff --cached --quiet || git commit -m "ci: [${env.DEPLOY_ENV}] update image tag to ${env.IMAGE_TAG} [skip ci]"
+                            git push https://${GIT_USER}:${GIT_TOKEN}@github.com/Phuc-215/yas-deploy.git main
+                        """
+                    }
+                }
+            }
+        }
     }
 	
     post {
         always {
             script {
-                if (env.BUILT_SERVICES) {
-                    def services = env.BUILT_SERVICES.split(",")
+                if (env.CHANGED_SERVICES) {
+                    def services = env.CHANGED_SERVICES.split(",")
 
                     for (svc in services) {
                         def image = "${DOCKERHUB_USR}/${svc}"
-                        sh "docker rmi ${image}:${COMMIT_ID} || true"
+                        sh "docker rmi ${image}:${env.IMAGE_TAG} || true"
                         sh "docker rmi ${image}:latest || true"
                     }
                 }
             }
         }
-	success {
+	    success {
             echo """
             CI successfully!
             Enviroment : ${env.DEPLOY_ENV}
             Image tag  : ${env.IMAGE_TAG}
-            Services   : ${env.BUILT_SERVICES}
+            Services   : ${env.CHANGED_SERVICES}
             """
         }
         failure {
             echo "CI failure. Watch logs for details."
+        }
     }
 }
