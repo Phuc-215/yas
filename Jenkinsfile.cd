@@ -76,12 +76,12 @@ pipeline {
         stage('Deploy Backoffice Layer') {
             steps {
                 sh """
-                    helm dependency build ../charts/backoffice-bff
-                    helm upgrade --install backoffice-bff ../charts/backoffice-bff \
+                    helm dependency build ${CHARTS_PATH}/backoffice-bff
+                    helm upgrade --install backoffice-bff ${CHARTS_PATH}/backoffice-bff \
                         --namespace ${NAMESPACE} \
                         --set backend.ingress.host=backoffice.${params.DOMAIN}
-                    helm dependency build ../charts/backoffice-ui
-                    helm upgrade --install backoffice-ui ../charts/backoffice-ui \
+                    helm dependency build ${CHARTS_PATH}/backoffice-ui
+                    helm upgrade --install backoffice-ui ${CHARTS_PATH}/backoffice-ui \
                         --namespace ${NAMESPACE}
                 """
             }
@@ -90,12 +90,12 @@ pipeline {
         stage('Deploy Storefront Layer') {
             steps {
                 sh """
-                    helm dependency build ../charts/storefront-bff
-                    helm upgrade --install storefront-bff ../charts/storefront-bff \
+                    helm dependency build ${CHARTS_PATH}/storefront-bff
+                    helm upgrade --install storefront-bff ${CHARTS_PATH}/storefront-bff \
                         --namespace ${NAMESPACE} \
                         --set backend.ingress.host=storefront.${params.DOMAIN}
-                    helm dependency build ../charts/storefront-ui
-                    helm upgrade --install storefront-ui ../charts/storefront-ui \
+                    helm dependency build ${CHARTS_PATH}/storefront-ui
+                    helm upgrade --install storefront-ui ${CHARTS_PATH}/storefront-ui \
                         --namespace ${NAMESPACE}
                 """
             }
@@ -104,7 +104,7 @@ pipeline {
         stage('Deploy Swagger UI') {
             steps {
                 sh """
-                    helm upgrade --install swagger-ui ../charts/swagger-ui \
+                    helm upgrade --install swagger-ui ${CHARTS_PATH}/swagger-ui \
                         --namespace ${NAMESPACE} \
                         --set ingress.host=api.${params.DOMAIN}
                 """
