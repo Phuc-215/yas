@@ -19,8 +19,8 @@ public class ImperativeClientConfig extends ElasticsearchConfiguration {
     public ClientConfiguration clientConfiguration() {
         return ClientConfiguration.builder()
                 .connectedTo(elasticsearchConfig.getUrl())
+                .usingSsl()
                 .withBasicAuth(elasticsearchConfig.getUsername(), elasticsearchConfig.getPassword())
-                .withSsl()
                 .build();
     }
 }
