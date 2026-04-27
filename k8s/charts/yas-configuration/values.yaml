@@ -261,7 +261,7 @@ customerApplicationConfig:
 # Search application config custom
 searchApplicationConfig:
   elasticsearch:
-    url: elasticsearch-es-http.elasticsearch.svc.cluster.local    # Modify the internal url of service
+    url: https://elasticsearch-es-http.elasticsearch.svc.cluster.local    # Modify the internal url of service
     username: ${ELASTICSEARCH_USERNAME}
     password: ${ELASTICSEARCH_PASSWORD}
 

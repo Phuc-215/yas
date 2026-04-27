@@ -35,56 +35,79 @@ pipeline {
             }
         }
 
-        stage('Get all services') {
+        stage('Deploy Configuration') {
             steps {
-                script {
-                    env.ALL_SERVICES = sh(
-                        script: "ls ${CHARTS_PATH}",
-                        returnStdout: true
-                    ).trim()
-                    echo "All services: ${env.ALL_SERVICES}"
-                }
+                sh """
+                    helm dependency build ${CHARTS_PATH}/yas-configuration
+                    helm upgrade --install yas-configuration ${CHARTS_PATH}/yas-configuration \
+                        --namespace yas --create-namespace
+                """
             }
         }
 
-        stage('Deploy all services with latest') {
+        stage('Deploy Applications') {
             steps {
                 script {
-                    def services = env.ALL_SERVICES.split('\n')
-                    for (svc in services) {
-                        svc = svc.trim()
-                        if (svc == params.SERVICE_NAME) continue
+                    def services = [
+                        "cart","customer","inventory","location","media",
+                        "order","payment","product","promotion","rating",
+                        "search","tax","recommendation","webhook","sampledata"
+                    ]
 
-                        echo "Deploying ${svc} with tag: latest"
+                    for (svc in services) {
+                        def tag = (svc == params.SERVICE) ? COMMIT_ID : "latest"
+                        echo "Deploying ${svc} with tag ${tag}"
                         sh """
+                            helm dependency build ${CHARTS_PATH}/${svc} --skip-refresh || true
                             helm upgrade --install ${svc} ${CHARTS_PATH}/${svc} \
-                                --namespace ${NAMESPACE} \
-                                --create-namespace \
-                                --set image.repository=${DOCKERHUB_USER}/${svc} \
-                                --set image.tag=latest \
-                                --wait --timeout 3m \
-                                || true
+                            --namespace ${NAMESPACE} \
+                            --create-namespace \
+                            --set backend.ingress.host=api.yas.local.com \
+                            --set backend.image.repository=${DOCKERHUB_USER}/${svc} \
+                            --set backend.image.tag=${tag} \
+                            --wait --timeout 3m \
+                            || true
                         """
                     }
                 }
             }
         }
 
-        stage('Deploy selected service with commit ID') {
+        stage('Deploy Backoffice Layer') {
             steps {
-                script {
-                    def svc = params.SERVICE_NAME
-                    echo "Deploying ${svc} with tag: ${env.COMMIT_ID}"
-                    sh """
-                        helm upgrade --install ${svc} ${CHARTS_PATH}/${svc} \
-                            --namespace ${NAMESPACE} \
-                            --create-namespace \
-                            --set image.repository=${DOCKERHUB_USER}/${svc} \
-                            --set image.tag=${env.COMMIT_ID} \
-                            --set service.type=NodePort \
-                            --wait --timeout 3m
-                    """
-                }
+                sh """
+                    helm dependency build ${CHARTS_PATH}/backoffice-bff
+                    helm upgrade --install backoffice-bff ${CHARTS_PATH}/backoffice-bff \
+                        --namespace ${NAMESPACE} \
+                        --set backend.ingress.host=backoffice.${params.DOMAIN}
+                    helm dependency build ${CHARTS_PATH}/backoffice-ui
+                    helm upgrade --install backoffice-ui ${CHARTS_PATH}/backoffice-ui \
+                        --namespace ${NAMESPACE}
+                """
+            }
+        }
+        
+        stage('Deploy Storefront Layer') {
+            steps {
+                sh """
+                    helm dependency build ${CHARTS_PATH}/storefront-bff
+                    helm upgrade --install storefront-bff ${CHARTS_PATH}/storefront-bff \
+                        --namespace ${NAMESPACE} \
+                        --set backend.ingress.host=storefront.${params.DOMAIN}
+                    helm dependency build ${CHARTS_PATH}/storefront-ui
+                    helm upgrade --install storefront-ui ${CHARTS_PATH}/storefront-ui \
+                        --namespace ${NAMESPACE}
+                """
+            }
+        }
+        
+        stage('Deploy Swagger UI') {
+            steps {
+                sh """
+                    helm upgrade --install swagger-ui ${CHARTS_PATH}/swagger-ui \
+                        --namespace ${NAMESPACE} \
+                        --set ingress.host=api.${params.DOMAIN}
+                """
             }
         }
 
