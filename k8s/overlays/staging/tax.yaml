@@ -1,6 +1,0 @@
-backend:
-  image:
-    tag: v1.0.0
-  ingress:
-    enabled: true
-    host: tax.yas.local.com
