@@ -20,6 +20,11 @@ on:
 jobs:
   Build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+      packages: write
     env:
       FROM_ORIGINAL_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository || github.ref == 'refs/heads/main' }}
     steps:
@@ -32,11 +37,40 @@ jobs:
       - name: Run Maven Checkstyle
         if: ${{ env.FROM_ORIGINAL_REPOSITORY == 'true' }}
         run: mvn checkstyle:checkstyle -pl cart -am -Dcheckstyle.output.file=cart-checkstyle-result.xml
-      - name: Upload Checkstyle Result
+      - name: Publish Checkstyle Result
         if: ${{ env.FROM_ORIGINAL_REPOSITORY == 'true' }}
-        uses: jwgmeligmeyling/checkstyle-github-action@master
-        with:
-          path: '**/cart-checkstyle-result.xml'
+        shell: python
+        run: |
+          import glob
+          import os
+          import xml.etree.ElementTree as ET
+
+          reports = glob.glob("**/cart-checkstyle-result.xml", recursive=True)
+          if not reports:
+              raise SystemExit("No Checkstyle reports were generated")
+
+          annotation_count = 0
+          for report in reports:
+              root = ET.parse(report).getroot()
+              for checked_file in root.findall("file"):
+                  path = checked_file.get("name", "")
+                  if os.path.isabs(path):
+                      path = os.path.relpath(path, os.environ["GITHUB_WORKSPACE"])
+
+                  for error in checked_file.findall("error"):
+                      severity = error.get("severity", "warning")
+                      level = "error" if severity == "error" else "warning"
+                      line = error.get("line", "1")
+                      column = error.get("column", "1")
+                      message = error.get("message", "Checkstyle violation")
+                      source = error.get("source", "checkstyle").rsplit(".", 1)[-1]
+                      message = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                      print(
+                          f"::{level} file={path},line={line},col={column},title=Checkstyle ({source})::{message}"
+                      )
+                      annotation_count += 1
+
+          print(f"Published {annotation_count} Checkstyle annotation(s) from {len(reports)} report(s)")
       - name: Test Results
         uses: dorny/test-reporter@v1
         if: ${{ env.FROM_ORIGINAL_REPOSITORY == 'true' && (success() || failure()) }}
@@ -63,7 +97,17 @@ jobs:
         if: ${{ env.FROM_ORIGINAL_REPOSITORY == 'true' }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -pl cart -am
+          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION || 'nashtech-garage' }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY || 'nashtech-garage_yas-yas-parent' }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "::error::SONAR_TOKEN is not configured. Add it under Settings > Secrets and variables > Actions > Secrets."
+            exit 1
+          fi
+
+          mvn org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar -pl cart -am \
+            -Dsonar.organization="$SONAR_ORGANIZATION" \
+            -Dsonar.projectKey="$SONAR_PROJECT_KEY"
       - name: Add coverage report to PR
         uses: madrapps/jacoco-report@v1.6.1
         if: ${{ env.FROM_ORIGINAL_REPOSITORY == 'true' }}
